@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import android.provider.MediaStore
+import android.provider.MediaStore.Audio.Media as A
 import androidx.core.content.ContextCompat
 
 object Library {
@@ -36,7 +36,6 @@ object Library {
         val s = Store.settings
         val out = ArrayList<Song>()
         if (hasPermission(ctx)) {
-            val A = MediaStore.Audio.Media
             val proj = arrayOf(
                 A._ID, A.TITLE, A.ARTIST, A.ALBUM, A.ALBUM_ID, A.DURATION, A.DATA,
                 A.DATE_ADDED, A.TRACK, A.YEAR, A.SIZE, A.MIME_TYPE

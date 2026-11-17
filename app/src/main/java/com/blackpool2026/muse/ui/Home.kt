@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -178,7 +180,7 @@ fun SongListView(
             modifier = Modifier.fillMaxSize()
         ) {
             if (header != null) item(span = { GridItemSpan(maxLineSpan) }) { header() }
-            androidx.compose.foundation.lazy.grid.itemsIndexed(list, key = { _, s -> s.id }) { i, song ->
+            gridItemsIndexed(list, key = { _, s -> s.id }) { i, song ->
                 SongCard(
                     song, ui.mediaId == song.id, vm.selection.contains(song.id),
                     onClick = { if (selecting) vm.toggleSelect(song.id) else vm.play(list, i) },
@@ -250,7 +252,7 @@ fun SelectionTop(vm: MuseViewModel, list: List<Song>) {
 fun AlbumsTab(vm: MuseViewModel) {
     if (vm.albums.isEmpty()) { EmptyState(I.Album, "Sin álbumes", "Cuando haya música aparecerá aquí."); return }
     LazyVerticalGrid(GridCells.Adaptive(150.dp), contentPadding = PaddingValues(8.dp), modifier = Modifier.fillMaxSize()) {
-        androidx.compose.foundation.lazy.grid.items(vm.albums, key = { it.key }) { a ->
+        gridItems(vm.albums, key = { it.key }) { a ->
             Column(
                 Modifier.clip(RoundedCornerShape(12.dp)).clickable { vm.push(Route.Album(a.key)) }.padding(6.dp)
             ) {
