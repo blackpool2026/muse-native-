@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Muse</string>
+    <string name="channel_name">Reproducción</string>
+    <string name="widget_desc">Controla tu música desde el escritorio</string>
+</resources>
