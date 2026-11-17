@@ -63,6 +63,7 @@ class MuseViewModel(app: Application) : AndroidViewModel(app) {
     var playlists by mutableStateOf<List<Playlist>>(Store.playlists); private set
     var plays by mutableStateOf(Store.plays); private set
     var hasPerm by mutableStateOf(Library.hasPermission(app))
+    @set:JvmName("assignQuery")
     var query by mutableStateOf("")
     var tab by mutableStateOf(0)
     var playerOpen by mutableStateOf(false)
