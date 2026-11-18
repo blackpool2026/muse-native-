@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.blackpool2026.muse.MuseViewModel
 import com.blackpool2026.muse.Route
+import com.blackpool2026.muse.data.Covers
 import com.blackpool2026.muse.data.Playlist
 import com.blackpool2026.muse.data.Song
 import com.blackpool2026.muse.data.Store
@@ -64,6 +66,12 @@ fun HomeScreen(vm: MuseViewModel, ui: PlayerUi) {
         vm.sortSongs(vm.songs.filter { vm.favorites.contains(it.id) })
     }
     val active: List<Song> = when (vm.tab) { 0 -> vm.visible; 4 -> favList; else -> emptyList() }
+    // Tutoriales: salen solos la primera vez que se usa cada parte de la app.
+    LaunchedEffect(vm.settings.onboarded, vm.songs.isNotEmpty()) {
+        if (vm.settings.onboarded && vm.songs.isNotEmpty()) vm.tip("basics")
+    }
+    LaunchedEffect(vm.tab) { if (vm.tab == 3) vm.tip("lists") }
+    LaunchedEffect(vm.selection.isNotEmpty()) { if (vm.selection.isNotEmpty()) vm.tip("select") }
     Column(Modifier.fillMaxSize()) {
         if (vm.selection.isNotEmpty()) SelectionTop(vm, active)
         else HomeTop(vm)
@@ -218,6 +226,8 @@ fun SongMenu(vm: MuseViewModel, song: Song, playlist: Playlist?, index: Int, cou
     }
     MenuItem("Ir al álbum") { dismiss(); vm.push(Route.Album(song.albumKey)) }
     MenuItem("Ir al artista") { dismiss(); vm.push(Route.Artist(song.artist)) }
+    MenuItem("Cambiar portada") { dismiss(); vm.requestCover(listOf(song)) }
+    if (Covers.hasCustom(song.id)) MenuItem("Quitar portada propia") { dismiss(); vm.removeCover(listOf(song)) }
     if (playlist != null) {
         MenuItem("Quitar de esta lista") { Store.removeFromPlaylist(playlist.id, song.id); dismiss() }
         if (index > 0) MenuItem("Subir") { Store.moveInPlaylist(playlist.id, index, index - 1); dismiss() }
@@ -239,11 +249,22 @@ fun SelectionTop(vm: MuseViewModel, list: List<Song>) {
             MText("${sel.size} seleccionadas", 16, FontWeight.Bold)
             MText(fmtTime(sel.sumOf { it.durationMs }), 12, color = t.textDim)
         }
+        var moreOpen by remember { mutableStateOf(false) }
         IconBtn(I.Play, { vm.play(sel, 0); vm.clearSelection() }, t.accent)
-        IconBtn(I.Queue, { vm.conn.addToQueue(sel); vm.toast("Añadidas a la cola"); vm.clearSelection() })
         IconBtn(I.Lists, { vm.pickerIds = sel.map { it.id } })
         IconBtn(I.Heart, { vm.addFavs(sel); vm.clearSelection() })
         IconBtn(I.SelectAll, { vm.selectAll(list) })
+        Box {
+            IconBtn(I.More, { moreOpen = true })
+            DropdownMenu(moreOpen, { moreOpen = false }) {
+                MenuItem("Añadir a la cola") {
+                    moreOpen = false; vm.conn.addToQueue(sel); vm.toast("Añadidas a la cola"); vm.clearSelection()
+                }
+                MenuItem("Poner portada a la selección") { moreOpen = false; vm.requestCover(sel); vm.clearSelection() }
+                if (sel.any { Covers.hasCustom(it.id) })
+                    MenuItem("Quitar portadas propias") { moreOpen = false; vm.removeCover(sel); vm.clearSelection() }
+            }
+        }
     }
 }
 

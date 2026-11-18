@@ -14,6 +14,10 @@ import android.net.Uri
 import android.os.Build
 import android.util.LruCache
 import android.util.Size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -27,12 +31,85 @@ object Covers {
     private val mem = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
+    private val GENERIC_FOLDERS = setOf(
+        "download", "downloads", "telegram", "music", "musica", "música", "audio", "audios", "sounds",
+        "documents", "documentos", "bluetooth", "whatsapp audio", "media", "0", "sdcard", "storage", "emulated"
+    )
     private val misses = ConcurrentHashMap.newKeySet<String>()
     private val locks = ConcurrentHashMap<String, Any>()
 
+    private lateinit var customDir: File
+    private lateinit var customIndex: File
+    /** id de canción -> nombre de archivo de su portada personalizada. */
+    private val custom = ConcurrentHashMap<Long, String>()
+
+    /** Cambia cuando se pone o quita una portada personalizada, para refrescar la interfaz. */
+    var customRev by mutableIntStateOf(0)
+        private set
+
     fun init(ctx: Context) {
         dir = File(ctx.cacheDir, "covers").apply { mkdirs() }
+        // Borra el caché antiguo (claves por álbum) que causaba portadas repetidas.
+        dir.listFiles()?.forEach { if (!it.name.startsWith("v2_")) it.delete() }
+        customDir = File(ctx.filesDir, "covers_custom").apply { mkdirs() }
+        customIndex = File(ctx.filesDir, "covers_custom.json")
+        try {
+            if (customIndex.exists()) {
+                val o = JSONObject(customIndex.readText())
+                o.keys().forEach { k -> k.toLongOrNull()?.let { custom[it] = o.getString(k) } }
+            }
+        } catch (_: Throwable) {}
     }
+
+    fun hasCustom(id: Long): Boolean = custom.containsKey(id)
+
+    private fun customFile(id: Long): File? = custom[id]?.let { File(customDir, it).takeIf { f -> f.exists() } }
+
+    private fun saveIndex() {
+        try {
+            val o = JSONObject()
+            custom.forEach { (k, v) -> o.put(k.toString(), v) }
+            customIndex.writeText(o.toString())
+        } catch (_: Throwable) {}
+    }
+
+    private fun refreshAfterCustomChange() {
+        mem.evictAll()
+        misses.clear()
+    }
+
+    /** Guarda una imagen elegida por el usuario como portada de todas esas canciones. Ejecutar fuera del hilo principal. */
+    fun setCustom(ctx: Context, ids: List<Long>, uri: Uri): Boolean {
+        return try {
+            val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return false
+            val src = decodeBytes(bytes, 640) ?: return false
+            val side = minOf(src.width, src.height)
+            val sq = Bitmap.createBitmap(src, (src.width - side) / 2, (src.height - side) / 2, side, side)
+            val out = if (side > 640) Bitmap.createScaledBitmap(sq, 640, 640, true) else sq
+            val name = "c${System.currentTimeMillis()}.jpg"
+            FileOutputStream(File(customDir, name)).use { out.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+            val old = ids.mapNotNull { custom[it] }.toSet()
+            ids.forEach { custom[it] = name }
+            old.forEach { deleteIfUnused(it) }
+            saveIndex()
+            refreshAfterCustomChange()
+            true
+        } catch (_: Throwable) { false }
+    }
+
+    fun removeCustom(ids: List<Long>) {
+        val old = ids.mapNotNull { custom.remove(it) }.toSet()
+        old.forEach { deleteIfUnused(it) }
+        saveIndex()
+        refreshAfterCustomChange()
+    }
+
+    private fun deleteIfUnused(name: String) {
+        if (!custom.values.contains(name)) try { File(customDir, name).delete() } catch (_: Throwable) {}
+    }
+
+    /** Llamar desde el hilo principal tras un cambio para que las imágenes se recarguen. */
+    fun notifyChanged() { customRev++ }
 
     private fun bucket(px: Int): Int = when {
         px <= 96 -> 96
@@ -47,6 +124,10 @@ object Covers {
         val b = bucket(px)
         val memKey = "${song.coverKey}@$b"
         mem.get(memKey)?.let { return it }
+        customFile(song.id)?.let { cf ->
+            val bmp = decodeFile(cf.absolutePath, b)
+            if (bmp != null) { mem.put(memKey, bmp); return bmp }
+        }
         if (misses.contains(song.coverKey)) return null
         synchronized(locks.getOrPut(song.coverKey) { Any() }) {
             mem.get(memKey)?.let { return it }
@@ -98,16 +179,21 @@ object Covers {
                 try { r.release() } catch (_: Throwable) {}
             }
         } catch (_: Throwable) {}
+        // Imagen suelta en la carpeta: solo si la carpeta es de un álbum (no una carpeta genérica
+        // como Descargas, donde una sola imagen se repetiría en todas las canciones).
         try {
             val folder = File(song.folder)
-            for (n in listOf("cover", "folder", "front", "album", "albumart", "artwork")) {
-                for (e in listOf("jpg", "jpeg", "png")) {
-                    val f = File(folder, "$n.$e")
-                    if (f.exists()) decodeFile(f.absolutePath, size)?.let { return it }
+            if (folder.name.lowercase() !in GENERIC_FOLDERS) {
+                for (n in listOf("cover", "folder", "front", "album", "albumart", "artwork")) {
+                    for (e in listOf("jpg", "jpeg", "png")) {
+                        val f = File(folder, "$n.$e")
+                        if (f.exists()) decodeFile(f.absolutePath, size)?.let { return it }
+                    }
                 }
             }
         } catch (_: Throwable) {}
-        if (song.albumId > 0) {
+        // El albumart antiguo se comparte entre todas las canciones del mismo álbum: solo en Android < 10.
+        if (Build.VERSION.SDK_INT < 29 && song.albumId > 0) {
             try {
                 val u = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), song.albumId)
                 ctx.contentResolver.openInputStream(u)?.use { s ->

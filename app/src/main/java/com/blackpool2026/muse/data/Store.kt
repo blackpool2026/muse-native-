@@ -27,7 +27,10 @@ data class Settings(
     val speed: Float = 1f,
     val eqEnabled: Boolean = false,
     val eqLevels: List<Int> = emptyList(),
-    val onboarded: Boolean = false
+    val onboarded: Boolean = false,
+    /** 0 = automático según el fondo, 1 = texto claro, 2 = texto oscuro. */
+    val textMode: Int = 0,
+    val tutorialSeen: Set<String> = emptySet()
 )
 
 data class Snap(val ids: List<Long>, val index: Int, val pos: Long, val shuffle: Boolean, val repeat: Int)
@@ -204,6 +207,8 @@ object Store {
         put("boost", s.boost); put("skipSilence", s.skipSilence); put("speed", s.speed.toDouble())
         put("eqEnabled", s.eqEnabled); put("eqLevels", JSONArray(s.eqLevels))
         put("onboarded", s.onboarded)
+        put("textMode", s.textMode)
+        put("tutorialSeen", JSONArray(s.tutorialSeen.toList()))
     }
 
     private fun settingsFrom(j: JSONObject): Settings {
@@ -228,7 +233,9 @@ object Store {
             speed = j.optDouble("speed", d.speed.toDouble()).toFloat(),
             eqEnabled = j.optBoolean("eqEnabled", d.eqEnabled),
             eqLevels = j.optJSONArray("eqLevels")?.let { a -> (0 until a.length()).map { a.getInt(it) } } ?: emptyList(),
-            onboarded = j.optBoolean("onboarded", d.onboarded)
+            onboarded = j.optBoolean("onboarded", d.onboarded),
+            textMode = j.optInt("textMode", d.textMode),
+            tutorialSeen = j.optJSONArray("tutorialSeen")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
         )
     }
 }

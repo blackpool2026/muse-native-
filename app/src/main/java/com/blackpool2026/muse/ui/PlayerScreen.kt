@@ -27,6 +27,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import com.blackpool2026.muse.data.Covers
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -68,6 +70,7 @@ fun PlayerScreen(vm: MuseViewModel, ui: PlayerUi) {
     val frac = if (dragging) dragValue else (pos.toFloat() / dur).coerceIn(0f, 1f)
     val shownPos = if (dragging) (dragValue * dur).toLong() else pos
     val fav = song != null && vm.favorites.contains(song.id)
+    LaunchedEffect(Unit) { vm.tip("player") }
 
     Box(
         Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
@@ -84,6 +87,8 @@ fun PlayerScreen(vm: MuseViewModel, ui: PlayerUi) {
                     DropdownMenu(menuOpen, { menuOpen = false }) {
                         MenuItem("Información") { menuOpen = false; showInfo = true }
                         if (song != null) {
+                            MenuItem("Cambiar portada") { menuOpen = false; vm.requestCover(listOf(song)) }
+                            if (Covers.hasCustom(song.id)) MenuItem("Quitar portada propia") { menuOpen = false; vm.removeCover(listOf(song)) }
                             MenuItem("Ir al álbum") { menuOpen = false; vm.playerOpen = false; vm.push(Route.Album(song.albumKey)) }
                             MenuItem("Ir al artista") { menuOpen = false; vm.playerOpen = false; vm.push(Route.Artist(song.artist)) }
                         }

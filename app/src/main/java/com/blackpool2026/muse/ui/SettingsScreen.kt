@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +63,7 @@ fun SettingsScreen(vm: MuseViewModel, route: Route) {
         Route.Themes -> ThemesScreen(vm)
         Route.Eq -> EqScreen(vm)
         Route.FolderPicker -> FolderPickerScreen(vm)
+        Route.Help -> HelpScreen(vm)
         else -> SettingsMain(vm)
     }
 }
@@ -99,11 +101,18 @@ fun SettingsMain(vm: MuseViewModel) {
         durOpts.indexOf(s.minDurSec), { minDlg = false }
     ) { i -> vm.update { it.copy(minDurSec = durOpts[i]) }; vm.rescanWithSettings(); minDlg = false }
 
+    var textDlg by remember { mutableStateOf(false) }
+    val textOpts = listOf("Automático (según el fondo)", "Claro", "Oscuro")
+    if (textDlg) ChoiceDialog("Color del texto", textOpts, s.textMode, { textDlg = false }) { i ->
+        vm.update { it.copy(textMode = i) }; textDlg = false
+    }
+
     Column(Modifier.fillMaxSize()) {
         TopBar("Ajustes", { vm.pop() })
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             item { SectionTitle("Apariencia") }
             item { ListRow(I.Palette, "Temas", "Más de ${com.blackpool2026.muse.ui.Themes.all.size} temas por categoría") { vm.push(Route.Themes) } }
+            item { ListRow(I.Info, "Color del texto", textOpts.getOrElse(s.textMode) { textOpts[0] }) { textDlg = true } }
             item { SectionTitle("Biblioteca") }
             item { ListRow(I.Folder, "Carpetas", "Elige de dónde leer la música") { vm.push(Route.FolderPicker) } }
             item { ListRow(I.Refresh, "Buscar música nueva", "${vm.songs.size} canciones en la biblioteca") { vm.scan(false); vm.toast("Buscando música…") } }
@@ -124,6 +133,7 @@ fun SettingsMain(vm: MuseViewModel) {
             }
             item { ListRow(I.Info, "Optimización de batería", "Evita que Android detenga la música en segundo plano") { openBattery(ctx) } }
             item { SectionTitle("Información") }
+            item { ListRow(I.Help, "Ayuda y tutoriales", "Aprende lo básico y repasa los consejos") { vm.push(Route.Help) } }
             item {
                 val (n, bytes) = Covers.cacheInfo()
                 ListRow(I.Info, "Caché de portadas", "$n portadas · ${fmtSize(bytes)}") {
@@ -165,12 +175,22 @@ fun ThemesScreen(vm: MuseViewModel) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) vm.setCustomImage(uri)
     }
+    LaunchedEffect(Unit) { vm.tip("themes") }
     Column(Modifier.fillMaxSize()) {
         TopBar("Temas", { vm.pop() })
         Row(
             Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) { groups.forEach { g -> Pill(g, g == group) { group = g } } }
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically
+        ) {
+            MText("Texto:", 13, FontWeight.Bold, LocalMuse.current.textDim)
+            listOf("Auto", "Claro", "Oscuro").forEachIndexed { i, label ->
+                Pill(label, vm.settings.textMode == i) { vm.update { it.copy(textMode = i) } }
+            }
+        }
         if (group == "Personalizado") {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 item { SectionTitle("Tu imagen de fondo") }

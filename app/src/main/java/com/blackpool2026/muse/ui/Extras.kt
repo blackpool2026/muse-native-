@@ -25,6 +25,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +77,7 @@ fun EqScreen(vm: MuseViewModel) {
     val freqs = AudioFx.bandFreqsHz
     val lo = AudioFx.minLevel
     val hi = AudioFx.maxLevel
+    LaunchedEffect(Unit) { vm.tip("eq") }
     Column(Modifier.fillMaxSize()) {
         TopBar("Ecualizador y volumen", { vm.pop() })
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {

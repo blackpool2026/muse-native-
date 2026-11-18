@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.blackpool2026.muse.MuseViewModel
 import com.blackpool2026.muse.Route
+import com.blackpool2026.muse.data.Covers
 import com.blackpool2026.muse.data.Playlist
 import com.blackpool2026.muse.data.Song
 import com.blackpool2026.muse.data.Store
@@ -86,6 +87,13 @@ fun DetailScreen(vm: MuseViewModel, ui: PlayerUi, route: Route) {
                 DropdownMenu(menuOpen, { menuOpen = false }) {
                     MenuItem("Renombrar") { menuOpen = false; renaming = true }
                     MenuItem("Eliminar lista") { menuOpen = false; deleting = true }
+                }
+            } else if (route is Route.Album && list.isNotEmpty()) Box {
+                IconBtn(I.More, { menuOpen = true })
+                DropdownMenu(menuOpen, { menuOpen = false }) {
+                    MenuItem("Portada para todo el álbum") { menuOpen = false; vm.requestCover(list) }
+                    if (list.any { Covers.hasCustom(it.id) })
+                        MenuItem("Quitar portadas propias") { menuOpen = false; vm.removeCover(list) }
                 }
             }
         }

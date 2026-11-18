@@ -44,6 +44,7 @@ sealed class Route {
     data object Themes : Route()
     data object Eq : Route()
     data object FolderPicker : Route()
+    data object Help : Route()
 }
 
 class MuseViewModel(app: Application) : AndroidViewModel(app) {
@@ -230,6 +231,51 @@ class MuseViewModel(app: Application) : AndroidViewModel(app) {
             }
             toast(if (ok) "Imagen aplicada" else "No se pudo usar esa imagen")
         }
+    }
+
+    // ---------- portadas personalizadas ----------
+    /** Canciones a las que se aplicará la imagen que el usuario elija; la pantalla principal abre el selector. */
+    var coverTargets by mutableStateOf<List<Long>?>(null); private set
+
+    fun requestCover(list: List<Song>) {
+        if (list.isNotEmpty()) coverTargets = list.map { it.id }
+    }
+
+    fun cancelCover() { coverTargets = null }
+
+    fun applyCover(uri: Uri) {
+        val ids = coverTargets ?: return
+        coverTargets = null
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { Covers.setCustom(ctx, ids, uri) }
+            Covers.notifyChanged()
+            if (ok) { widgetRefresh(); toast(if (ids.size == 1) "Portada cambiada" else "Portada aplicada a ${ids.size} canciones") }
+            else toast("No se pudo usar esa imagen")
+        }
+    }
+
+    fun removeCover(list: List<Song>) {
+        Covers.removeCustom(list.map { it.id })
+        Covers.notifyChanged()
+        widgetRefresh()
+        toast("Portada original restaurada")
+    }
+
+    // ---------- tutoriales ----------
+    /** Tutorial que se está mostrando ahora (o null). */
+    var pendingTutorial by mutableStateOf<String?>(null); private set
+
+    /** Muestra el tutorial `id` solo la primera vez y si no hay otro abierto. */
+    fun tip(id: String) {
+        if (pendingTutorial == null && !settings.tutorialSeen.contains(id)) pendingTutorial = id
+    }
+
+    fun openTutorial(id: String) { pendingTutorial = id }
+
+    fun closeTutorial() {
+        val id = pendingTutorial ?: return
+        pendingTutorial = null
+        if (!settings.tutorialSeen.contains(id)) update { it.copy(tutorialSeen = it.tutorialSeen + id) }
     }
 
     // ---------- reproducción ----------

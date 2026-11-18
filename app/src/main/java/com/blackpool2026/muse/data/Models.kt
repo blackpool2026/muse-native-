@@ -29,7 +29,8 @@ data class Song(
 ) {
     val uri: Uri get() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
     val folder: String = path.substringBeforeLast('/', "")
-    val coverKey: String = if (albumId > 0 && album != UNKNOWN_ALBUM) "a$albumId" else "s$id"
+    /** Clave de portada POR CANCIÓN: antes era por álbum y canciones distintas compartían imagen. */
+    val coverKey: String = "v2_${id}_$size"
     val albumKey: Long = if (albumId > 0 && album != UNKNOWN_ALBUM) albumId else -(album.hashCode().toLong() and 0xFFFFFFL) - 1L
     val searchKey: String by lazy { norm("$title $artist $album") }
 }

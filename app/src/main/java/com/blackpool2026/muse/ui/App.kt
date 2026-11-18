@@ -1,9 +1,17 @@
 package com.blackpool2026.muse.ui
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color as AColor
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -47,8 +55,18 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun MuseRoot(vm: MuseViewModel, askPerm: () -> Unit, openSettings: () -> Unit) {
-    val t = remember(vm.settings, vm.custom) { resolveTheme(vm.settings, vm.custom) }
-    val act = LocalContext.current as? ComponentActivity
+    val ctxRoot = LocalContext.current
+    val st = vm.settings
+    val imgRes = if (st.themeId == Themes.CUSTOM_IMAGE) 0 else (Themes.find(st.themeId)?.imageRes ?: 0)
+    val isImg = st.themeId == Themes.CUSTOM_IMAGE || imgRes != 0
+    // Brillo medio de la imagen de fondo, para elegir texto claro u oscuro automáticamente.
+    val luma by produceState(0.25f, st.themeId, st.imgRev, imgRes) {
+        value = if (!isImg) 0.25f else withContext(Dispatchers.IO) {
+            sampleLuma(ctxRoot, imgRes, if (st.themeId == Themes.CUSTOM_IMAGE) vm.custom else null)
+        }
+    }
+    val t = remember(vm.settings, vm.custom, luma) { resolveTheme(vm.settings, vm.custom, luma) }
+    val act = ctxRoot as? ComponentActivity
     LaunchedEffect(t.dark) {
         val style = if (t.dark) SystemBarStyle.dark(AColor.TRANSPARENT)
         else SystemBarStyle.light(AColor.TRANSPARENT, AColor.TRANSPARENT)
@@ -75,6 +93,26 @@ fun MuseRoot(vm: MuseViewModel, askPerm: () -> Unit, openSettings: () -> Unit) {
         }
     }
 }
+
+/** Brillo medio (0..1) de una imagen, leyéndola en pequeño. */
+private fun sampleLuma(ctx: Context, res: Int, path: String?): Float = try {
+    fun decode(o: BitmapFactory.Options): Bitmap? =
+        if (res != 0) BitmapFactory.decodeResource(ctx.resources, res, o) else BitmapFactory.decodeFile(path, o)
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    decode(bounds)
+    var s = 1
+    while (bounds.outWidth / (s * 2) >= 64) s *= 2
+    val b = decode(BitmapFactory.Options().apply { inSampleSize = s })
+    if (b == null) 0.25f else {
+        val sm = Bitmap.createScaledBitmap(b, 16, 16, true)
+        var sum = 0f
+        for (x in 0 until 16) for (y in 0 until 16) {
+            val p = sm.getPixel(x, y)
+            sum += (0.299f * AColor.red(p) + 0.587f * AColor.green(p) + 0.114f * AColor.blue(p)) / 255f
+        }
+        sum / 256f
+    }
+} catch (_: Throwable) { 0.25f }
 
 @Composable
 fun PermissionScreen(askPerm: () -> Unit, openSettings: () -> Unit) {
@@ -104,6 +142,11 @@ fun PermissionScreen(askPerm: () -> Unit, openSettings: () -> Unit) {
 fun MainContent(vm: MuseViewModel) {
     val ui by vm.conn.state.collectAsState()
     val route = vm.current
+    // Selector de imagen para portadas personalizadas (lo piden varios menús).
+    val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) vm.applyCover(uri) else vm.cancelCover()
+    }
+    LaunchedEffect(vm.coverTargets) { if (vm.coverTargets != null) coverPicker.launch("image/*") }
     LaunchedEffect(vm.hasPerm, vm.allFolders.size, vm.settings.onboarded) {
         if (!vm.settings.onboarded && vm.allFolders.isNotEmpty() && vm.current == null) vm.push(Route.FolderPicker)
     }
@@ -120,7 +163,7 @@ fun MainContent(vm: MuseViewModel) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (route == null) HomeScreen(vm, ui)
                 else when (route) {
-                    Route.Settings, Route.Themes, Route.Eq, Route.FolderPicker -> SettingsScreen(vm, route)
+                    Route.Settings, Route.Themes, Route.Eq, Route.FolderPicker, Route.Help -> SettingsScreen(vm, route)
                     else -> DetailScreen(vm, ui, route)
                 }
             }
@@ -134,6 +177,7 @@ fun MainContent(vm: MuseViewModel) {
         ) { PlayerScreen(vm, ui) }
         val ids = vm.pickerIds
         if (ids != null) PlaylistPicker(vm, ids)
+        vm.pendingTutorial?.let { TutorialDialog(vm, it) }
     }
 }
 

@@ -53,6 +53,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
@@ -116,9 +117,11 @@ fun MText(
     text: String, size: Int = 15, weight: FontWeight = FontWeight.Normal,
     color: Color = LocalMuse.current.text, modifier: Modifier = Modifier, maxLines: Int = 1
 ) {
+    val halo = LocalMuse.current.halo
     Text(
         text, color = color, fontSize = size.sp, fontWeight = weight, maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis, modifier = modifier
+        overflow = TextOverflow.Ellipsis, modifier = modifier,
+        style = if (halo.alpha > 0f) TextStyle(shadow = Shadow(halo, Offset.Zero, 7f)) else TextStyle.Default
     )
 }
 
@@ -196,8 +199,9 @@ fun CoverImage(song: Song?, size: Dp, modifier: Modifier = Modifier, shape: Shap
     val ctx = LocalContext.current
     val px = with(LocalDensity.current) { size.roundToPx() }
     val key = song?.coverKey
-    var bmp by remember(key, px) { mutableStateOf(song?.let { Covers.peek(it, px) }?.asImageBitmap()) }
-    LaunchedEffect(key, px) {
+    val rev = Covers.customRev
+    var bmp by remember(key, px, rev) { mutableStateOf(song?.let { Covers.peek(it, px) }?.asImageBitmap()) }
+    LaunchedEffect(key, px, rev) {
         if (song != null && bmp == null) {
             val b = withContext(CoverDispatcher) { Covers.get(ctx, song, px) }
             if (b != null) bmp = b.asImageBitmap()
@@ -322,6 +326,7 @@ fun MenuItem(label: String, onClick: () -> Unit) {
 @Composable
 fun MuseDialog(
     title: String, onDismiss: () -> Unit, confirmText: String? = null, onConfirm: (() -> Unit)? = null,
+    dismissText: String? = null,
     content: @Composable () -> Unit
 ) {
     val t = LocalMuse.current
@@ -335,7 +340,11 @@ fun MuseDialog(
             if (confirmText != null && onConfirm != null)
                 TextButton(onClick = onConfirm) { Text(confirmText, color = t.accent, fontWeight = FontWeight.Bold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(if (onConfirm == null) "Cerrar" else "Cancelar", color = t.textDim) } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(dismissText ?: if (onConfirm == null) "Cerrar" else "Cancelar", color = t.textDim)
+            }
+        }
     )
 }
 

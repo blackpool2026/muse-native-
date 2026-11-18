@@ -21,7 +21,9 @@ data class MuseColors(
     val dark: Boolean,
     val bar: Color, val card: Color, val stroke: Color,
     val imageRes: Int = 0, val imagePath: String? = null,
-    val imgBlur: Int = 0, val imgDim: Float = 0f, val imgRev: Int = 0
+    val imgBlur: Int = 0, val imgDim: Float = 0f, val imgRev: Int = 0,
+    /** Contorno suave del texto (color opuesto) para leerlo sobre imágenes o fondos medios. */
+    val halo: Color = Color.Transparent
 ) {
     val isImage: Boolean get() = imageRes != 0 || imagePath != null
 }
@@ -33,19 +35,37 @@ private fun c(hex: Int): Color = Color(0xFF000000L or hex.toLong())
 fun buildColors(a: Int, b: Int, d: Int, accent: Int): MuseColors =
     buildColorsL(0xFF000000L or a.toLong(), 0xFF000000L or b.toLong(), 0xFF000000L or d.toLong(), 0xFF000000L or accent.toLong())
 
-fun buildColorsL(a: Long, b: Long, d: Long, accent: Long, image: Boolean = false): MuseColors {
+/**
+ * @param lumaOverride brillo (0..1) del fondo cuando es una imagen; si es null se calcula con los colores.
+ * @param textMode 0 = automático, 1 = texto claro, 2 = texto oscuro.
+ */
+fun buildColorsL(
+    a: Long, b: Long, d: Long, accent: Long, image: Boolean = false,
+    lumaOverride: Float? = null, textMode: Int = 0
+): MuseColors {
     val bg1 = Color(a); val bg2 = Color(b); val bg3 = Color(d); val ac = Color(accent)
-    val avg = (bg1.luminance() + bg2.luminance() + bg3.luminance()) / 3f
-    val dark = image || avg < 0.40f
+    val avg = lumaOverride ?: ((bg1.luminance() + bg2.luminance() + bg3.luminance()) / 3f)
+    val dark = when (textMode) {
+        1 -> true
+        2 -> false
+        else -> if (image) avg < 0.5f else avg < 0.40f
+    }
     val text = if (dark) Color(0xFFF4F4F6) else Color(0xFF16161A)
-    val bar = if (image) Color(0xE6000000) else lerp(bg3, if (dark) Color.Black else Color.White, if (dark) 0.40f else 0.45f)
+    val bar = when {
+        image -> if (dark) Color(0xE6000000) else Color(0xE6F5F5F7)
+        else -> lerp(bg3, if (dark) Color.Black else Color.White, if (dark) 0.40f else 0.45f)
+    }
+    // Zona gris (ni claro ni oscuro) o imagen: añade contorno al texto para que siempre se lea.
+    val needsHalo = image || textMode != 0 || (avg in 0.25f..0.60f)
+    val halo = if (needsHalo) (if (dark) Color(0xB3000000) else Color(0xB3FFFFFF)) else Color.Transparent
     return MuseColors(
         bg1 = bg1, bg2 = bg2, bg3 = bg3,
-        text = text, textDim = text.copy(alpha = 0.66f),
+        text = text, textDim = text.copy(alpha = 0.72f),
         accent = ac, onAccent = if (ac.luminance() > 0.45f) Color(0xFF101010) else Color.White,
         dark = dark, bar = bar.copy(alpha = if (image) 0.9f else 0.97f),
         card = text.copy(alpha = if (image) 0.10f else 0.07f),
-        stroke = text.copy(alpha = 0.13f)
+        stroke = text.copy(alpha = 0.13f),
+        halo = halo
     )
 }
 
@@ -188,17 +208,20 @@ object Themes {
     fun isImageTheme(id: String): Boolean = id == CUSTOM_IMAGE || (find(id)?.imageRes ?: 0) != 0
 }
 
-fun resolveTheme(s: Settings, customImagePath: String? = null): MuseColors {
+/** @param imageLuma brillo medio (0..1) de la imagen de fondo, ya medido; se ajusta con el oscurecido del tema. */
+fun resolveTheme(s: Settings, customImagePath: String? = null, imageLuma: Float = 0.25f): MuseColors {
+    val m = s.textMode
+    val seen = (imageLuma * (1f - s.imgDim.coerceIn(0f, 0.9f))).coerceIn(0f, 1f)
     if (s.themeId == Themes.CUSTOM_COLOR)
-        return buildColorsL(s.customBg1, s.customBg2, s.customBg2, s.customAccent)
+        return buildColorsL(s.customBg1, s.customBg2, s.customBg2, s.customAccent, textMode = m)
     if (s.themeId == Themes.CUSTOM_IMAGE) {
-        val b = buildColorsL(0xFF000000, 0xFF000000, 0xFF000000, s.imgAccent, image = true)
+        val b = buildColorsL(0xFF000000, 0xFF000000, 0xFF000000, s.imgAccent, image = true, lumaOverride = seen, textMode = m)
         return b.copy(imagePath = customImagePath ?: "", imgBlur = s.imgBlur, imgDim = s.imgDim, imgRev = s.imgRev)
     }
     val d = Themes.find(s.themeId) ?: Themes.all[0]
     if (d.imageRes != 0) {
-        val b = buildColorsL(d.bg1, d.bg2, d.bg3, d.accent, image = true)
+        val b = buildColorsL(d.bg1, d.bg2, d.bg3, d.accent, image = true, lumaOverride = seen, textMode = m)
         return b.copy(imageRes = d.imageRes, imgBlur = s.imgBlur, imgDim = s.imgDim)
     }
-    return buildColorsL(d.bg1, d.bg2, d.bg3, d.accent)
+    return buildColorsL(d.bg1, d.bg2, d.bg3, d.accent, textMode = m)
 }
