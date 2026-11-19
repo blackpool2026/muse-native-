@@ -128,15 +128,35 @@ fun EqScreen(vm: MuseViewModel) {
             item { SectionTitle("Volumen") }
             item {
                 SliderRow(
-                    "Amplificación", s.boost.toFloat(), 0f..100f, "+%.1f dB".format(s.boost * 12 / 100f),
+                    "Amplificación", s.boost.toFloat(), 0f..100f,
+                    "+%.1f dB".format(s.boost * AudioFx.GAIN_PER_STEP_MB / 100f),
                     onChange = { v -> vm.update(false) { it.copy(boost = v.toInt()) }; vm.applyFx() },
                     onDone = { vm.update { it } }
                 )
             }
-            if (s.boost > 60) item {
+            item {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("Normal" to 0, "Alto +10 dB" to 33, "Muy alto +20 dB" to 67, "Máximo +30 dB" to 100).forEach { (label, v) ->
+                        Pill(label, kotlin.math.abs(s.boost - v) <= 2) {
+                            vm.update { it.copy(boost = v) }; vm.applyFx()
+                        }
+                    }
+                }
+            }
+            item {
                 MText(
-                    "⚠ Un volumen muy amplificado puede distorsionar el sonido y dañar tus oídos o los altavoces.",
-                    13, color = t.accent, modifier = Modifier.padding(16.dp), maxLines = 3
+                    "Sube el volumen del teléfono y luego la amplificación. Funciona con audífonos de cable, Bluetooth y altavoz.",
+                    12, color = t.textDim, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), maxLines = 3
+                )
+            }
+            if (s.boost > 33) item {
+                MText(
+                    "Aviso: un volumen muy alto puede distorsionar el sonido y dañar tus oídos o los audífonos. " +
+                        "Empieza bajo y súbelo poco a poco, sobre todo con audífonos puestos.",
+                    13, color = t.accent, modifier = Modifier.padding(16.dp), maxLines = 4
                 )
             }
         }

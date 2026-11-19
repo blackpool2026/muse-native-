@@ -10,6 +10,9 @@ object AudioFx {
     private var loud: LoudnessEnhancer? = null
     private var session = 0
 
+    /** Cada punto del control de amplificación (0..100) suma 0,30 dB: el máximo son +30 dB. */
+    const val GAIN_PER_STEP_MB = 30
+
     @Volatile var bandFreqsHz: List<Int> = emptyList(); private set
     @Volatile var minLevel = -1500; private set
     @Volatile var maxLevel = 1500; private set
@@ -46,7 +49,7 @@ object AudioFx {
         } catch (_: Throwable) {}
         try {
             loud?.let { l ->
-                l.setTargetGain(s.boost * 12)
+                l.setTargetGain(s.boost.coerceIn(0, 100) * GAIN_PER_STEP_MB)
                 l.setEnabled(s.boost > 0)
             }
         } catch (_: Throwable) {}
